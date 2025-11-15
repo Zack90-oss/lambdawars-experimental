@@ -158,8 +158,6 @@ int CWarsWeapon::ShouldTransmit( const CCheckTransmitInfo *pInfo )
 		return FL_EDICT_DONTSEND;
 	}
 #endif // 0
-	Msg("message from CWarsWeapon::ShouldTransmit");
-	Msg(" MAX_EDICT_BITS = %d\n", MAX_EDICT_BITS);
 
 	CBaseEntity *pRecipientEntity = CBaseEntity::Instance( pInfo->m_pClientEnt );
 	Assert( pRecipientEntity->IsPlayer() );
