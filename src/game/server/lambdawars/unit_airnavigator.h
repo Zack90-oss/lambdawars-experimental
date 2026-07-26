@@ -39,6 +39,12 @@ public:
 	bool GetUseSimplifiedRouteBuilding();
 	void SetUseSimplifiedRouteBuilding( bool enable );
 
+	bool IsHeightDominator() const;
+	void SetHeightDominator( bool enable );
+
+	bool IsHeightRoleInitialized() const;
+	void SetHeightRoleInitialized(bool enable);
+
 	virtual CRecastMesh *GetNavMesh();
 
 private:
@@ -46,6 +52,9 @@ private:
 	float m_fDesiredHeight;
 	bool m_bTestRouteWorldOnly;
 	bool m_bUseSimplifiedRouteBuilding;
+	EHANDLE m_hHeightPartner;
+	bool m_bHeightDominator;
+	bool m_bHeightRoleInitialized;
 };
 
 // Inlines
@@ -72,6 +81,26 @@ inline bool UnitBaseAirNavigator::GetUseSimplifiedRouteBuilding()
 inline void UnitBaseAirNavigator::SetUseSimplifiedRouteBuilding( bool enable )
 {
 	m_bUseSimplifiedRouteBuilding = enable;
+}
+
+inline bool UnitBaseAirNavigator::IsHeightDominator() const
+{
+	return m_bHeightDominator;
+}
+
+inline void UnitBaseAirNavigator::SetHeightDominator(bool enable)
+{
+	m_bHeightDominator = enable;
+}
+
+inline bool UnitBaseAirNavigator::IsHeightRoleInitialized() const
+{
+	return m_bHeightRoleInitialized;
+}
+
+inline void UnitBaseAirNavigator::SetHeightRoleInitialized(bool enable)
+{
+	m_bHeightRoleInitialized = enable;
 }
 
 #endif // UNIT_AIRNAVIGATOR_H
