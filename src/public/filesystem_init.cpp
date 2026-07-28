@@ -801,6 +801,7 @@ FSReturnCode_t FileSystem_LoadSearchPaths( CFSSearchPathsInit &initInfo )
 	// Also, mark specific path IDs as "by request only". That way, we won't waste time searching in them
 	// when people forget to specify a search path.
 	initInfo.m_pFileSystem->MarkPathIDByRequestOnly( "executable_path", true );
+	initInfo.m_pFileSystem->MarkPathIDByRequestOnly( "base_path", true );
 	initInfo.m_pFileSystem->MarkPathIDByRequestOnly( "gamebin", true );
 	initInfo.m_pFileSystem->MarkPathIDByRequestOnly( "mod", true );
 
@@ -1330,6 +1331,23 @@ FSReturnCode_t FileSystem_SetBasePaths( IFileSystem *pFileSystem )
 		return SetupFileSystemError( false, FS_INVALID_PARAMETERS, "FileSystem_GetExecutableDir failed." );
 
 	pFileSystem->AddSearchPath( executablePath, "EXECUTABLE_PATH" );
+
+	return FS_OK;
+}
+
+// Returning proper FSReturnCode_t as other similar functions despite it being called from client and server inits
+FSReturnCode_t FileSystem_SetAdditionalBasePaths(IFileSystem *pFileSystem)
+{
+	pFileSystem->RemoveSearchPaths("BASE_PATH");
+
+	char basePath[MAX_PATH];
+	FileSystem_GetBaseDir(basePath, sizeof(basePath));
+
+	if (!FileSystem_GetBaseDir(basePath, sizeof(basePath)))
+		return SetupFileSystemError(false, FS_INVALID_PARAMETERS, "FileSystem_GetBaseDir failed.");
+
+	pFileSystem->AddSearchPath(basePath, "BASE_PATH", PATH_ADD_TO_TAIL);
+
 	return FS_OK;
 }
 

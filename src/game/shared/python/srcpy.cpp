@@ -9,6 +9,7 @@
 #include "srcpy.h"
 #include <filesystem.h>
 #include "icommandline.h"
+#include "srcpy_addon_security.h"
 #include "srcpy_usermessage.h"
 #include "srcpy_gamerules.h"
 #include "srcpy_entities.h"
@@ -504,6 +505,10 @@ bool CSrcPython::PostInitInterpreter( bool bStandAloneInterpreter )
 		_cef = Import("_cef");
 #endif	// CLIENT_DLL
 	}
+
+	// Apply restrictions
+	if (!SrcPython_ApplyUsageRestrictions(&mainmodule, &mainnamespace))
+		return false;
 
 	return true;
 }

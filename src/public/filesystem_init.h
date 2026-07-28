@@ -192,6 +192,9 @@ FSReturnCode_t FileSystem_LoadSearchPaths( CFSSearchPathsInit &initInfo );
 // paths (like Hammer does), you can call this to reset executable_path.
 FSReturnCode_t FileSystem_SetBasePaths( IFileSystem *pFileSystem );
 
+// Main purpose is to add BASE_PATH. Called in both client and server ::Init()
+FSReturnCode_t FileSystem_SetAdditionalBasePaths(IFileSystem *pFileSystem);
+
 // Utility function to add the PLATFORM search path.
 void FileSystem_AddSearchPath_Platform( IFileSystem *pFileSystem, const char *szGameInfoPath );
 

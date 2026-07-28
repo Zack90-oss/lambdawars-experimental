@@ -41,6 +41,35 @@ static bool SrcPyPathIsInGameFolder( const char *pPath )
 	return true;
 }
 
+// Basically just the copy of SrcPyPathIsInGameFolder but with changed path so it will include every Lambda Wars' folder
+static bool SrcPyPathIsInBaseFolder(const char *pPath)
+{
+	if (SrcPySystem()->IsPathProtected())
+	{
+		// Verify the file is in the gamefolder
+		char searchPaths[MAX_PATH];
+		filesystem->GetSearchPath("BASE_PATH", true, searchPaths, sizeof(searchPaths));
+		V_StripTrailingSlash(searchPaths);
+
+		if (V_IsAbsolutePath(pPath))
+		{
+			if (V_strnicmp(pPath, searchPaths, V_strlen(searchPaths)) != 0)
+				return false;
+		}
+		else
+		{
+			char pFullPath[MAX_PATH];
+			char moddir[MAX_PATH];
+			filesystem->RelativePathToFullPath(".", "BASE_PATH", moddir, sizeof(moddir));
+			V_MakeAbsolutePath(pFullPath, sizeof(pFullPath), pPath, moddir);
+
+			if (V_strnicmp(pFullPath, searchPaths, V_strlen(searchPaths)) != 0)
+				return false;
+		}
+	}
+	return true;
+}
+
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
@@ -206,6 +235,14 @@ boost::python::list PyFS_ListDir( const char *pPath, const char *pPathID, const 
 {
 	if( !pPath || !pWildCard )
 		return boost::python::list();
+
+	if (!SrcPyPathIsInBaseFolder(pPath))
+	{
+		PyErr_SetString(PyExc_IOError, "filesystem module only allows paths in the base folder");
+		throw boost::python::error_already_set();
+		//Msg("%s\n", pPath);
+		//Msg("filesystem module only allows paths in the base folder!!!\n");
+	}
 
 	const char *pFileName;
 	char wildcard[MAX_PATH];

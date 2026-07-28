@@ -28,6 +28,7 @@
 #include "movehelper_server.h"
 #include "networkstringtable_gamedll.h"
 #include "filesystem.h"
+#include "filesystem_init.h"
 #include "func_areaportalwindow.h"
 #include "igamesystem.h"
 #include "init_factory.h"
@@ -812,6 +813,10 @@ bool CServerGameDLL::DLLInit( CreateInterfaceFn appSystemFactory,
 
 	// Mount any game that is available to us
 	MountExtraContent();
+
+	// Adding BASE_PATH
+	if (FileSystem_SetAdditionalBasePaths(g_pFullFileSystem) != FS_OK)
+		return false;
 
 	if ( CommandLine()->FindParm( "-headtracking" ) )
 		g_bHeadTrackingEnabled = true;

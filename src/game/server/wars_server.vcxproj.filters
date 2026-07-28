@@ -2008,6 +2008,9 @@
     <ClCompile Include="lambdawars\wars_util.cpp">
       <Filter>Source Files\wars</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\python\srcpy_addon_security.cpp">
+      <Filter>Source Files\Python</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\shared\python\srcpy_converters_ents.h">
@@ -3908,6 +3911,9 @@
     </ClInclude>
     <ClInclude Include="lambdawars\wars_util.h">
       <Filter>Source Files\wars</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\python\srcpy_addon_security.h">
+      <Filter>Source Files\Python</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -22,7 +22,8 @@
 #include "enginesprite.h"
 #include "networkstringtable_clientdll.h"
 #include "voice_status.h"
-#include "FileSystem.h"
+#include "filesystem.h"
+#include "filesystem_init.h"
 #include "c_te_legacytempents.h"
 #include "c_rope.h"
 #include "engine/IShadowMgr.h"
@@ -1262,6 +1263,10 @@ int CHLClient::Init( CreateInterfaceFn appSystemFactory, CGlobalVarsBase *pGloba
 
 	// Mount any source game that is available to us
 	MountExtraContent();
+
+	// Adding BASE_PATH
+	if (FileSystem_SetAdditionalBasePaths(g_pFullFileSystem) != FS_OK)
+		return false;
 
 	if ( CommandLine()->FindParm( "-textmode" ) )
 		g_bTextMode = true;
