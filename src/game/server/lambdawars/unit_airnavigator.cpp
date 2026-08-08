@@ -26,16 +26,13 @@ UnitBaseAirNavigator::UnitBaseAirNavigator( boost::python::object outer )
 	m_bUseSimplifiedRouteBuilding = true;
 	m_bTestRouteWorldOnly = true;
 	m_fCurrentHeight = m_fDesiredHeight = 0.0f;
-	m_bHeightDominator = false;
-	m_bHeightRoleInitialized = false;
-	m_hHeightPartner = NULL;
 }
 #endif // ENABLE_PYTHON
 
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-void UnitBaseAirNavigator::Update(UnitAirMoveCommand &MoveCommand)
+void UnitBaseAirNavigator::Update( UnitAirMoveCommand &MoveCommand )
 {
 	// Get reported height from locomotion
 	m_fCurrentHeight = MoveCommand.height;
@@ -43,130 +40,41 @@ void UnitBaseAirNavigator::Update(UnitAirMoveCommand &MoveCommand)
 
 	bool bIsAtMinDesiredHeight = m_fCurrentHeight >= m_fDesiredHeight;
 
-	BaseClass::Update(MoveCommand);
+	BaseClass::Update( MoveCommand );
 
 	// Calculate upmove if needed
 	MoveCommand.upmove = 0.0f;
-
-	if (GetPath()->m_iGoalType != GOALTYPE_NONE && GetPath()->GetCurWaypoint())
+	if( GetPath()->m_iGoalType != GOALTYPE_NONE && GetPath()->GetCurWaypoint() )
 	{
-		bool bCurTargetIsGoal =
-			(GetPath()->m_iGoalType == GOALTYPE_TARGETENT ||
-			GetPath()->m_iGoalType == GOALTYPE_TARGETENT_INRANGE) &&
-			GetPath()->CurWaypointIsGoal();
+		bool bCurTargetIsGoal = (GetPath()->m_iGoalType == GOALTYPE_TARGETENT || GetPath()->m_iGoalType == GOALTYPE_TARGETENT_INRANGE) && GetPath()->CurWaypointIsGoal();
 
-		float fTargetZ =
-			GetPath()->GetCurWaypoint()->GetPos().z +
-			(-GetOuter()->CollisionProp()->OBBMins().z);
+		float fTargetZ = GetPath()->GetCurWaypoint()->GetPos().z + (-GetOuter()->CollisionProp()->OBBMins().z);
+		if( m_LastGoalStatus == CHS_CLIMBDEST || !bCurTargetIsGoal )
+			fTargetZ += m_fDesiredHeight;
 
-		UnitBaseAirNavigator *pTargetAirNavigator = nullptr;
-
-		// Check if target is an air unit and determine height roles
-		if(bCurTargetIsGoal && GetPath()->m_hTarget)
+		if( m_LastGoalStatus == CHS_CLIMBDEST || bCurTargetIsGoal )
 		{
-			CBaseEntity *pTarget = GetPath()->m_hTarget.Get();
-
-			if (pTarget && pTarget->MyUnitPointer())
+			if( fTargetZ > GetAbsOrigin().z )
 			{
-				pTargetAirNavigator =
-					dynamic_cast<UnitBaseAirNavigator*>(
-					pTarget->MyUnitPointer()->GetNavigator());
-				
-				if (pTargetAirNavigator)
-				{
-					if (m_hHeightPartner != pTarget)
-					{
-						m_hHeightPartner = pTarget;
+				// Calculate needed up movement
+				MoveCommand.upmove = Max( -MoveCommand.maxspeed, Min(
+					(fTargetZ - GetAbsOrigin().z) / MoveCommand.interval,
+					MoveCommand.maxspeed
+				) );
 
-						m_bHeightRoleInitialized = false;
-						// pTargetAirNavigator->m_bHeightRoleInitialized = false;
-					}
-
-					if (!m_bHeightRoleInitialized)
-					{
-						m_bHeightDominator =
-							GetAbsOrigin().z >= pTarget->GetAbsOrigin().z;
-
-						m_bHeightRoleInitialized = true;
-					}
-
-					if (!pTargetAirNavigator->m_bHeightRoleInitialized)
-					{
-						pTargetAirNavigator->m_bHeightDominator =
-							!m_bHeightDominator;
-
-						pTargetAirNavigator->m_bHeightRoleInitialized = true;
-					}
-				}
+				// Zero out other movement (so we don't bump into a cliff or wall)
+				if( m_LastGoalStatus == CHS_CLIMBDEST )
+					MoveCommand.forwardmove = MoveCommand.sidemove = 0.0f;
+			}
+			else if( fTargetZ > GetAbsOrigin().z && bIsAtMinDesiredHeight )
+			{
+				// Avoid going down again
+				MoveCommand.upmove = 1.0f;
 			}
 		}
-
-		// Normal ground target height handling
-		if (!pTargetAirNavigator)
+		else if( fTargetZ > GetAbsOrigin().z && bIsAtMinDesiredHeight )
 		{
-			if (m_LastGoalStatus == CHS_CLIMBDEST || !bCurTargetIsGoal)
-			{
-				fTargetZ += m_fDesiredHeight;
-			}
-		}
-
-		if (m_LastGoalStatus == CHS_CLIMBDEST || bCurTargetIsGoal)
-		{
-			float flDelta = fTargetZ - GetAbsOrigin().z;
-
-			// Air target handling
-			if (pTargetAirNavigator)
-			{
-				const float flTolerance = 24.0f;
-
-				// Only the non-dominator adjusts height.
-				if (!m_bHeightDominator)
-				{
-					if (flDelta > flTolerance)
-					{
-						MoveCommand.upmove = Max(
-							-MoveCommand.maxspeed,
-							Min(
-							flDelta / MoveCommand.interval,
-							MoveCommand.maxspeed
-							)
-							);
-					}
-				}
-				else
-				{
-					// Dominator never changes altitude because of another air unit.
-					MoveCommand.upmove = 0.0f;
-				}
-			}
-			else
-			{
-				// Normal air navigation (ground targets / waypoints)
-				if (flDelta > 0.0f)
-				{
-					MoveCommand.upmove = Max(
-						-MoveCommand.maxspeed,
-						Min(
-						flDelta / MoveCommand.interval,
-						MoveCommand.maxspeed
-						)
-						);
-				}
-				else if (fTargetZ > GetAbsOrigin().z && bIsAtMinDesiredHeight)
-				{
-					MoveCommand.upmove = 1.0f;
-				}
-			}
-
-			// Zero out other movement when climbing
-			if (m_LastGoalStatus == CHS_CLIMBDEST)
-			{
-				MoveCommand.forwardmove = 0.0f;
-				MoveCommand.sidemove = 0.0f;
-			}
-		}
-		else if (fTargetZ > GetAbsOrigin().z && bIsAtMinDesiredHeight)
-		{
+			// Avoid going down again to prevent navigation issues
 			MoveCommand.upmove = 1.0f;
 		}
 	}
