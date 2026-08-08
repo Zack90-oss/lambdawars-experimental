@@ -1,3 +1,6 @@
+# Visual Studio temporaries
+src/.vs/*
+
 #################
 ## Eclipse
 #################

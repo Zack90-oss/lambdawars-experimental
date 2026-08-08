@@ -13,7 +13,7 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{4086CE3F-2EFA-4029-8F04-D20576718A12}</ProjectGuid>
     <RootNamespace>boost_python</RootNamespace>
-    <ProjectName>boost_python3</ProjectName>
+    <ProjectName>boost_python34</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -85,7 +85,7 @@
       <Culture>0x1409</Culture>
     </ResourceCompile>
     <Lib>
-      <OutputFile>..\..\..\..\..\lib\public\boost_python3.lib</OutputFile>
+      <OutputFile>..\..\..\..\..\lib\public\boost_python34.lib</OutputFile>
       <IgnoreSpecificDefaultLibraries>libc;libcd;libcmtd;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Lib>
     <Bscmake>
@@ -129,7 +129,7 @@
       <Culture>0x1409</Culture>
     </ResourceCompile>
     <Lib>
-      <OutputFile>..\..\..\..\..\lib\public\boost_python3.lib</OutputFile>
+      <OutputFile>..\..\..\..\..\lib\public\boost_python34.lib</OutputFile>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Lib>
     <Bscmake>

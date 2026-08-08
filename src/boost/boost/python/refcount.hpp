@@ -34,6 +34,7 @@ inline void decref(T* p)
 template <class T>
 inline void xdecref(T* p)
 {
+    assert( !p || Py_REFCNT(python::upcast<PyObject>(p)) > 0 );
 #if defined(BOOST_MSVC) && (BOOST_MSVC >= 1700)
 	// Workaround VS2012 & VS2013 internal compiler error...
 	PyObject *_py_tmp = (PyObject *)(python::upcast<PyObject>(p));
