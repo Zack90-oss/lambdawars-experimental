@@ -373,6 +373,10 @@ class LongTest(unittest.TestCase):
         for base in invalid_bases:
             self.assertRaises(ValueError, int, '42', base)
 
+        # Invalid unicode string
+        # See bpo-34087
+        self.assertRaises(ValueError, int, '\u3053\u3093\u306b\u3061\u306f')
+
 
     def test_conversion(self):
 
@@ -582,8 +586,6 @@ class LongTest(unittest.TestCase):
                 return (x > y) - (x < y)
             def __eq__(self, other):
                 return self._cmp__(other) == 0
-            def __ne__(self, other):
-                return self._cmp__(other) != 0
             def __ge__(self, other):
                 return self._cmp__(other) >= 0
             def __gt__(self, other):
@@ -623,6 +625,8 @@ class LongTest(unittest.TestCase):
     def test__format__(self):
         self.assertEqual(format(123456789, 'd'), '123456789')
         self.assertEqual(format(123456789, 'd'), '123456789')
+        self.assertEqual(format(123456789, ','), '123,456,789')
+        self.assertEqual(format(123456789, '_'), '123_456_789')
 
         # sign and aligning are interdependent
         self.assertEqual(format(1, "-"), '1')
@@ -651,8 +655,25 @@ class LongTest(unittest.TestCase):
         self.assertEqual(format(int('be', 16), "X"), "BE")
         self.assertEqual(format(-int('be', 16), "x"), "-be")
         self.assertEqual(format(-int('be', 16), "X"), "-BE")
+        self.assertRaises(ValueError, format, 1234567890, ',x')
+        self.assertEqual(format(1234567890, '_x'), '4996_02d2')
+        self.assertEqual(format(1234567890, '_X'), '4996_02D2')
 
         # octal
+        self.assertEqual(format(3, "o"), "3")
+        self.assertEqual(format(-3, "o"), "-3")
+        self.assertEqual(format(1234, "o"), "2322")
+        self.assertEqual(format(-1234, "o"), "-2322")
+        self.assertEqual(format(1234, "-o"), "2322")
+        self.assertEqual(format(-1234, "-o"), "-2322")
+        self.assertEqual(format(1234, " o"), " 2322")
+        self.assertEqual(format(-1234, " o"), "-2322")
+        self.assertEqual(format(1234, "+o"), "+2322")
+        self.assertEqual(format(-1234, "+o"), "-2322")
+        self.assertRaises(ValueError, format, 1234567890, ',o')
+        self.assertEqual(format(1234567890, '_o'), '111_4540_1322')
+
+        # binary
         self.assertEqual(format(3, "b"), "11")
         self.assertEqual(format(-3, "b"), "-11")
         self.assertEqual(format(1234, "b"), "10011010010")
@@ -663,11 +684,23 @@ class LongTest(unittest.TestCase):
         self.assertEqual(format(-1234, " b"), "-10011010010")
         self.assertEqual(format(1234, "+b"), "+10011010010")
         self.assertEqual(format(-1234, "+b"), "-10011010010")
+        self.assertRaises(ValueError, format, 1234567890, ',b')
+        self.assertEqual(format(12345, '_b'), '11_0000_0011_1001')
 
         # make sure these are errors
         self.assertRaises(ValueError, format, 3, "1.3")  # precision disallowed
+        self.assertRaises(ValueError, format, 3, "_c")   # underscore,
+        self.assertRaises(ValueError, format, 3, ",c")   # comma, and
         self.assertRaises(ValueError, format, 3, "+c")   # sign not allowed
                                                          # with 'c'
+
+        self.assertRaisesRegex(ValueError, 'Cannot specify both', format, 3, '_,')
+        self.assertRaisesRegex(ValueError, 'Cannot specify both', format, 3, ',_')
+        self.assertRaisesRegex(ValueError, 'Cannot specify both', format, 3, '_,d')
+        self.assertRaisesRegex(ValueError, 'Cannot specify both', format, 3, ',_d')
+
+        self.assertRaisesRegex(ValueError, "Cannot specify ',' with 's'", format, 3, ',s')
+        self.assertRaisesRegex(ValueError, "Cannot specify '_' with 's'", format, 3, '_s')
 
         # ensure that only int and float type specifiers work
         for format_spec in ([chr(x) for x in range(ord('a'), ord('z')+1)] +
@@ -690,6 +723,20 @@ class LongTest(unittest.TestCase):
         self.assertRaises(OverflowError, int, float('inf'))
         self.assertRaises(OverflowError, int, float('-inf'))
         self.assertRaises(ValueError, int, float('nan'))
+
+    def test_mod_division(self):
+        with self.assertRaises(ZeroDivisionError):
+            _ = 1 % 0
+
+        self.assertEqual(13 % 10, 3)
+        self.assertEqual(-13 % 10, 7)
+        self.assertEqual(13 % -10, -7)
+        self.assertEqual(-13 % -10, -3)
+
+        self.assertEqual(12 % 4, 0)
+        self.assertEqual(-12 % 4, 0)
+        self.assertEqual(12 % -4, 0)
+        self.assertEqual(-12 % -4, 0)
 
     def test_true_division(self):
         huge = 1 << 40000
@@ -724,6 +771,25 @@ class LongTest(unittest.TestCase):
 
         for zero in ["huge / 0", "mhuge / 0"]:
             self.assertRaises(ZeroDivisionError, eval, zero, namespace)
+
+    def test_floordiv(self):
+        with self.assertRaises(ZeroDivisionError):
+            _ = 1 // 0
+
+        self.assertEqual(2 // 3, 0)
+        self.assertEqual(2 // -3, -1)
+        self.assertEqual(-2 // 3, -1)
+        self.assertEqual(-2 // -3, 0)
+
+        self.assertEqual(-11 // -3, 3)
+        self.assertEqual(-11 // 3, -4)
+        self.assertEqual(11 // -3, -4)
+        self.assertEqual(11 // 3, 3)
+
+        self.assertEqual(-12 // -3, 4)
+        self.assertEqual(-12 // 3, -4)
+        self.assertEqual(12 // -3, -4)
+        self.assertEqual(12 // 3, 4)
 
     def check_truediv(self, a, b, skip_small=True):
         """Verify that the result of a/b is correctly rounded, by
@@ -847,6 +913,57 @@ class LongTest(unittest.TestCase):
             self.check_truediv(-x, y)
             self.check_truediv(-x, -y)
 
+    def test_negative_shift_count(self):
+        with self.assertRaises(ValueError):
+            42 << -3
+        with self.assertRaises(ValueError):
+            42 << -(1 << 1000)
+        with self.assertRaises(ValueError):
+            42 >> -3
+        with self.assertRaises(ValueError):
+            42 >> -(1 << 1000)
+
+    def test_lshift_of_zero(self):
+        self.assertEqual(0 << 0, 0)
+        self.assertEqual(0 << 10, 0)
+        with self.assertRaises(ValueError):
+            0 << -1
+        self.assertEqual(0 << (1 << 1000), 0)
+        with self.assertRaises(ValueError):
+            0 << -(1 << 1000)
+
+    @support.cpython_only
+    def test_huge_lshift_of_zero(self):
+        # Shouldn't try to allocate memory for a huge shift. See issue #27870.
+        # Other implementations may have a different boundary for overflow,
+        # or not raise at all.
+        self.assertEqual(0 << sys.maxsize, 0)
+        self.assertEqual(0 << (sys.maxsize + 1), 0)
+
+    @support.cpython_only
+    @support.bigmemtest(sys.maxsize + 1000, memuse=2/15 * 2, dry_run=False)
+    def test_huge_lshift(self, size):
+        self.assertEqual(1 << (sys.maxsize + 1000), 1 << 1000 << sys.maxsize)
+
+    def test_huge_rshift(self):
+        self.assertEqual(42 >> (1 << 1000), 0)
+        self.assertEqual((-42) >> (1 << 1000), -1)
+
+    @support.cpython_only
+    @support.bigmemtest(sys.maxsize + 500, memuse=2/15, dry_run=False)
+    def test_huge_rshift_of_huge(self, size):
+        huge = ((1 << 500) + 11) << sys.maxsize
+        self.assertEqual(huge >> (sys.maxsize + 1), (1 << 499) + 5)
+        self.assertEqual(huge >> (sys.maxsize + 1000), 0)
+
+    @support.cpython_only
+    def test_small_ints_in_huge_calculation(self):
+        a = 2 ** 100
+        b = -a + 1
+        c = a + 1
+        self.assertIs(a + b, 1)
+        self.assertIs(c - a, 1)
+
     def test_small_ints(self):
         for i in range(-5, 257):
             self.assertIs(i, i + 0)
@@ -898,6 +1015,17 @@ class LongTest(unittest.TestCase):
             self.assertEqual((-a).bit_length(), i+1)
             self.assertEqual((a+1).bit_length(), i+1)
             self.assertEqual((-a-1).bit_length(), i+1)
+
+    def test_bit_count(self):
+        for a in range(-1000, 1000):
+            self.assertEqual(a.bit_count(), bin(a).count("1"))
+
+        for exp in [10, 17, 63, 64, 65, 1009, 70234, 1234567]:
+            a = 2**exp
+            self.assertEqual(a.bit_count(), 1)
+            self.assertEqual((a - 1).bit_count(), exp)
+            self.assertEqual((a ^ 63).bit_count(), 7)
+            self.assertEqual(((a - 1) ^ 510).bit_count(), exp - 8)
 
     def test_round(self):
         # check round-half-even algorithm. For round to nearest ten;
@@ -969,7 +1097,7 @@ class LongTest(unittest.TestCase):
             self.assertIs(type(got), int)
 
         # bad second argument
-        bad_exponents = ('brian', 2.0, 0j, None)
+        bad_exponents = ('brian', 2.0, 0j)
         for e in bad_exponents:
             self.assertRaises(TypeError, round, 3, e)
 
@@ -1205,6 +1333,23 @@ class LongTest(unittest.TestCase):
         self.assertRaises(TypeError, myint.from_bytes, 0, 'big')
         self.assertRaises(TypeError, int.from_bytes, 0, 'big', True)
 
+        class myint2(int):
+            def __new__(cls, value):
+                return int.__new__(cls, value + 1)
+
+        i = myint2.from_bytes(b'\x01', 'big')
+        self.assertIs(type(i), myint2)
+        self.assertEqual(i, 2)
+
+        class myint3(int):
+            def __init__(self, value):
+                self.foo = 'bar'
+
+        i = myint3.from_bytes(b'\x01', 'big')
+        self.assertIs(type(i), myint3)
+        self.assertEqual(i, 1)
+        self.assertEqual(getattr(i, 'foo', 'none'), 'bar')
+
     def test_access_to_nonexistent_digit_0(self):
         # http://bugs.python.org/issue14630: A bug in _PyLong_Copy meant that
         # ob_digit[0] was being incorrectly accessed for instances of a
@@ -1226,9 +1371,16 @@ class LongTest(unittest.TestCase):
                 self.assertEqual(type(value << shift), int)
                 self.assertEqual(type(value >> shift), int)
 
+    def test_as_integer_ratio(self):
+        class myint(int):
+            pass
+        tests = [10, 0, -10, 1, sys.maxsize + 1, True, False, myint(42)]
+        for value in tests:
+            numerator, denominator = value.as_integer_ratio()
+            self.assertEqual((numerator, denominator), (int(value), 1))
+            self.assertEqual(type(numerator), int)
+            self.assertEqual(type(denominator), int)
 
-def test_main():
-    support.run_unittest(LongTest)
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

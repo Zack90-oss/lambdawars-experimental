@@ -1,5 +1,6 @@
 # Visual Studio temporaries
 src/.vs/*
+src/thirdparty/python/PCBuild/.vs/*
 
 #################
 ## Eclipse

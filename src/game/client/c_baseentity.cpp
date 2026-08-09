@@ -5033,10 +5033,10 @@ C_BaseEntity *C_BaseEntity::Instance( int iEnt )
 	return ClientEntityList().GetBaseEntity( iEnt );
 }
 
-#ifdef WIN32
-#pragma warning( push )
+#if defined(WIN32) && _MSC_VER < 1923
 #include <typeinfo.h>
-#pragma warning( pop )
+#else
+#include <typeinfo>
 #endif
 
 //-----------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 // detail/consuming_buffers.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2017 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -20,6 +20,7 @@
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/detail/buffer_sequence_adapter.hpp>
 #include <boost/asio/detail/limits.hpp>
+#include <boost/asio/registered_buffer.hpp>
 
 #include <boost/asio/detail/push_options.hpp>
 
@@ -102,7 +103,7 @@ public:
 
     std::advance(next, next_elem_);
     std::size_t elem_offset = next_elem_offset_;
-    while (next != end && max_size > 0 && result.count < result.max_buffers)
+    while (next != end && max_size > 0 && (result.count) < result.max_buffers)
     {
       Buffer next_buf = Buffer(*next) + elem_offset;
       result.elems[result.count] = boost::asio::buffer(next_buf, max_size);
@@ -270,6 +271,42 @@ public:
 
 #endif // !defined(BOOST_ASIO_NO_DEPRECATED)
 
+template <>
+class consuming_buffers<mutable_buffer,
+    mutable_registered_buffer, const mutable_buffer*>
+  : public consuming_single_buffer<mutable_registered_buffer>
+{
+public:
+  explicit consuming_buffers(const mutable_registered_buffer& buffer)
+    : consuming_single_buffer<mutable_registered_buffer>(buffer)
+  {
+  }
+};
+
+template <>
+class consuming_buffers<const_buffer,
+    mutable_registered_buffer, const mutable_buffer*>
+  : public consuming_single_buffer<mutable_registered_buffer>
+{
+public:
+  explicit consuming_buffers(const mutable_registered_buffer& buffer)
+    : consuming_single_buffer<mutable_registered_buffer>(buffer)
+  {
+  }
+};
+
+template <>
+class consuming_buffers<const_buffer,
+    const_registered_buffer, const const_buffer*>
+  : public consuming_single_buffer<const_registered_buffer>
+{
+public:
+  explicit consuming_buffers(const const_registered_buffer& buffer)
+    : consuming_single_buffer<const_registered_buffer>(buffer)
+  {
+  }
+};
+
 template <typename Buffer, typename Elem>
 class consuming_buffers<Buffer, boost::array<Elem, 2>,
     typename boost::array<Elem, 2>::const_iterator>
@@ -401,7 +438,7 @@ public:
     // No-op.
   }
 
-  std::size_t total_consume() const
+  std::size_t total_consumed() const
   {
     return 0;
   }

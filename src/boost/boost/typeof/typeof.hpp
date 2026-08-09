@@ -14,8 +14,9 @@
 #endif
 
 #include <boost/config.hpp>
+#include <boost/config/workaround.hpp>
 
-#if !defined(BOOST_NO_CXX11_DECLTYPE) && !defined(BOOST_NO_CXX11_TEMPLATE_ALIASES) && !defined(BOOST_TYPEOF_EMULATION)
+#if !BOOST_WORKAROUND(BOOST_MSVC, <= 1900) && !defined(BOOST_NO_CXX11_DECLTYPE) && !defined(BOOST_NO_CXX11_TEMPLATE_ALIASES) && !defined(BOOST_TYPEOF_EMULATION)
 #   define BOOST_TYPEOF_DECLTYPE
 #   ifndef BOOST_TYPEOF_NATIVE
 #       define BOOST_TYPEOF_NATIVE
@@ -83,7 +84,7 @@
 #           define BOOST_TYPEOF_KEYWORD __typeof__
 #       endif
 #   endif
-#elif defined __CODEGEARC__
+#elif defined BOOST_CODEGEARC
 #   ifndef BOOST_TYPEOF_EMULATION
 #       ifndef BOOST_TYPEOF_NATIVE
 #           define BOOST_TYPEOF_EMULATION_UNSUPPORTED
@@ -91,7 +92,7 @@
 #   else
 #       define BOOST_TYPEOF_EMULATION_UNSUPPORTED
 #   endif
-#elif defined __BORLANDC__
+#elif defined BOOST_BORLANDC
 #   ifndef BOOST_TYPEOF_EMULATION
 #       ifndef BOOST_TYPEOF_NATIVE
 #           define BOOST_TYPEOF_EMULATION_UNSUPPORTED
@@ -141,8 +142,8 @@
 #       error native typeof is not supported
 #   endif
 
-#elif defined(__BORLANDC__)
-#   if (__BORLANDC__ < 0x590)
+#elif defined(BOOST_BORLANDC)
+#   if (BOOST_BORLANDC < 0x590)
 #       define BOOST_TYPEOF_NO_FUNCTION_TYPES
 #       define BOOST_TYPEOF_NO_MEMBER_FUNCTION_TYPES
 #   endif

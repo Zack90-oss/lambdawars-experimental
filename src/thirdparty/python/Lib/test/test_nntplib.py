@@ -5,16 +5,29 @@ import textwrap
 import unittest
 import functools
 import contextlib
-from test import support
-from nntplib import NNTP, GroupInfo
 import nntplib
+import os.path
+import re
+import threading
+
+from test import support
+from test.support import socket_helper
+from nntplib import NNTP, GroupInfo
 from unittest.mock import patch
 try:
     import ssl
 except ImportError:
     ssl = None
 
-TIMEOUT = 30
+
+certfile = os.path.join(os.path.dirname(__file__), 'keycert3.pem')
+
+if ssl is not None:
+    SSLError = ssl.SSLError
+else:
+    class SSLError(Exception):
+        """Non-existent exception class when we lack SSL support."""
+        reason = "This will never be raised."
 
 # TODO:
 # - test the `file` arg to more commands
@@ -23,6 +36,8 @@ TIMEOUT = 30
 
 
 class NetworkedNNTPTestsMixin:
+
+    ssl_context = None
 
     def test_welcome(self):
         welcome = self.server.getwelcome()
@@ -69,7 +84,7 @@ class NetworkedNNTPTestsMixin:
         desc = self.server.description(self.GROUP_NAME)
         _check_desc(desc)
         # Another sanity check
-        self.assertIn("Python", desc)
+        self.assertIn(self.DESC, desc)
         # With a pattern
         desc = self.server.description(self.GROUP_PAT)
         _check_desc(desc)
@@ -126,6 +141,8 @@ class NetworkedNNTPTestsMixin:
         self.assertLessEqual(art_num, last)
         self._check_art_dict(art_dict)
 
+    @unittest.skipIf(True, 'temporarily skipped until a permanent solution'
+                           ' is found for issue #28971')
     def test_over(self):
         resp, count, first, last, name = self.server.group(self.GROUP_NAME)
         start = last - 10
@@ -158,6 +175,7 @@ class NetworkedNNTPTestsMixin:
         # XXX this could exceptionally happen...
         self.assertNotIn(article.lines[-1], (b".", b".\n", b".\r\n"))
 
+    @unittest.skipIf(True, "FIXME: see bpo-32128")
     def test_article_head_body(self):
         resp, count, first, last, name = self.server.group(self.GROUP_NAME)
         # Try to find an available article
@@ -181,11 +199,11 @@ class NetworkedNNTPTestsMixin:
         self.assertTrue(resp.startswith("220 "), resp)
         self.check_article_resp(resp, article, art_num)
         # Tolerate running the tests from behind a NNTP virus checker
-        blacklist = lambda line: line.startswith(b'X-Antivirus')
+        denylist = lambda line: line.startswith(b'X-Antivirus')
         filtered_head_lines = [line for line in head.lines
-                               if not blacklist(line)]
+                               if not denylist(line)]
         filtered_lines = [line for line in article.lines
-                          if not blacklist(line)]
+                          if not denylist(line)]
         self.assertEqual(filtered_lines, filtered_head_lines + [b''] + body.lines)
 
     def test_capabilities(self):
@@ -201,24 +219,6 @@ class NetworkedNNTPTestsMixin:
         # This re-emits the command
         resp, caps = self.server.capabilities()
         _check_caps(caps)
-
-    @unittest.skipUnless(ssl, 'requires SSL support')
-    def test_starttls(self):
-        file = self.server.file
-        sock = self.server.sock
-        try:
-            self.server.starttls()
-        except nntplib.NNTPPermanentError:
-            self.skipTest("STARTTLS not supported by server.")
-        else:
-            # Check that the socket and internal pseudo-file really were
-            # changed.
-            self.assertNotEqual(file, self.server.file)
-            self.assertNotEqual(sock, self.server.sock)
-            # Check that the new socket really is an SSL one
-            self.assertIsInstance(self.server.sock, ssl.SSLSocket)
-            # Check that trying starttls when it's already active fails.
-            self.assertRaises(ValueError, self.server.starttls)
 
     def test_zlogin(self):
         # This test must be the penultimate because further commands will be
@@ -248,7 +248,7 @@ class NetworkedNNTPTestsMixin:
         def wrap_meth(meth):
             @functools.wraps(meth)
             def wrapped(self):
-                with support.transient_internet(self.NNTP_HOST):
+                with socket_helper.transient_internet(self.NNTP_HOST):
                     meth(self)
             return wrapped
         for name in dir(cls):
@@ -261,6 +261,10 @@ class NetworkedNNTPTestsMixin:
             # value
             setattr(cls, name, wrap_meth(meth))
 
+    def test_timeout(self):
+        with self.assertRaises(ValueError):
+            self.NNTP_CLASS(self.NNTP_HOST, timeout=0, usenetrc=False)
+
     def test_with_statement(self):
         def is_connected():
             if not hasattr(server, 'file'):
@@ -271,17 +275,38 @@ class NetworkedNNTPTestsMixin:
                 return False
             return True
 
-        with self.NNTP_CLASS(self.NNTP_HOST, timeout=TIMEOUT, usenetrc=False) as server:
-            self.assertTrue(is_connected())
-            self.assertTrue(server.help())
-        self.assertFalse(is_connected())
+        kwargs = dict(
+            timeout=support.INTERNET_TIMEOUT,
+            usenetrc=False
+        )
+        if self.ssl_context is not None:
+            kwargs["ssl_context"] = self.ssl_context
 
-        with self.NNTP_CLASS(self.NNTP_HOST, timeout=TIMEOUT, usenetrc=False) as server:
-            server.quit()
-        self.assertFalse(is_connected())
+        try:
+            server = self.NNTP_CLASS(self.NNTP_HOST, **kwargs)
+            with server:
+                self.assertTrue(is_connected())
+                self.assertTrue(server.help())
+            self.assertFalse(is_connected())
+
+            server = self.NNTP_CLASS(self.NNTP_HOST, **kwargs)
+            with server:
+                server.quit()
+            self.assertFalse(is_connected())
+        except SSLError as ssl_err:
+            # matches "[SSL: DH_KEY_TOO_SMALL] dh key too small"
+            if re.search(r'(?i)KEY.TOO.SMALL', ssl_err.reason):
+                raise unittest.SkipTest(f"Got {ssl_err} connecting "
+                                        f"to {self.NNTP_HOST!r}")
+            raise
 
 
 NetworkedNNTPTestsMixin.wrap_methods()
+
+
+EOF_ERRORS = (EOFError,)
+if ssl is not None:
+    EOF_ERRORS += (ssl.SSLEOFError,)
 
 
 class NetworkedNNTPTests(NetworkedNNTPTestsMixin, unittest.TestCase):
@@ -289,14 +314,32 @@ class NetworkedNNTPTests(NetworkedNNTPTestsMixin, unittest.TestCase):
     NNTP_HOST = 'news.trigofacile.com'
     GROUP_NAME = 'fr.comp.lang.python'
     GROUP_PAT = 'fr.comp.lang.*'
+    DESC = 'Python'
 
     NNTP_CLASS = NNTP
 
     @classmethod
     def setUpClass(cls):
         support.requires("network")
-        with support.transient_internet(cls.NNTP_HOST):
-            cls.server = cls.NNTP_CLASS(cls.NNTP_HOST, timeout=TIMEOUT, usenetrc=False)
+        kwargs = dict(
+            timeout=support.INTERNET_TIMEOUT,
+            usenetrc=False
+        )
+        if cls.ssl_context is not None:
+            kwargs["ssl_context"] = cls.ssl_context
+        with socket_helper.transient_internet(cls.NNTP_HOST):
+            try:
+                cls.server = cls.NNTP_CLASS(cls.NNTP_HOST, **kwargs)
+            except SSLError as ssl_err:
+                # matches "[SSL: DH_KEY_TOO_SMALL] dh key too small"
+                if re.search(r'(?i)KEY.TOO.SMALL', ssl_err.reason):
+                    raise unittest.SkipTest(f"{cls} got {ssl_err} connecting "
+                                            f"to {cls.NNTP_HOST!r}")
+                print(cls.NNTP_HOST)
+                raise
+            except EOF_ERRORS:
+                raise unittest.SkipTest(f"{cls} got EOF error on connecting "
+                                        f"to {cls.NNTP_HOST!r}")
 
     @classmethod
     def tearDownClass(cls):
@@ -311,8 +354,11 @@ class NetworkedNNTP_SSLTests(NetworkedNNTPTests):
     # 400 connections per day are accepted from each IP address."
 
     NNTP_HOST = 'nntp.aioe.org'
-    GROUP_NAME = 'comp.lang.python'
-    GROUP_PAT = 'comp.lang.*'
+    # bpo-42794: aioe.test is one of the official groups on this server
+    # used for testing: https://news.aioe.org/manual/aioe-hierarchy/
+    GROUP_NAME = 'aioe.test'
+    GROUP_PAT = 'aioe.*'
+    DESC = 'test'
 
     NNTP_CLASS = getattr(nntplib, 'NNTP_SSL', None)
 
@@ -322,6 +368,10 @@ class NetworkedNNTP_SSLTests(NetworkedNNTPTests):
     # Disabled as the connection will already be encrypted.
     test_starttls = None
 
+    if ssl is not None:
+        ssl_context = ssl._create_unverified_context()
+        ssl_context.set_ciphers("DEFAULT")
+        ssl_context.maximum_version = ssl.TLSVersion.TLSv1_2
 
 #
 # Non-networked tests using a local server (or something mocking it).
@@ -379,6 +429,18 @@ def make_mock_file(handler):
     return (sio, file)
 
 
+class NNTPServer(nntplib.NNTP):
+
+    def __init__(self, f, host, readermode=None):
+        self.file = f
+        self.host = host
+        self._base_init(readermode)
+
+    def _close(self):
+        self.file.close()
+        del self.file
+
+
 class MockedNNTPTestsMixin:
     # Override in derived classes
     handler_class = None
@@ -394,7 +456,7 @@ class MockedNNTPTestsMixin:
     def make_server(self, *args, **kwargs):
         self.handler = self.handler_class()
         self.sio, file = make_mock_file(self.handler)
-        self.server = nntplib._NNTPBase(file, 'test.server', *args, **kwargs)
+        self.server = NNTPServer(file, 'test.server', *args, **kwargs)
         return self.server
 
 
@@ -612,7 +674,7 @@ class NNTPv1Handler:
                     "\tSat, 19 Jun 2010 18:04:08 -0400"
                     "\t<4FD05F05-F98B-44DC-8111-C6009C925F0C@gmail.com>"
                     "\t<hvalf7$ort$1@dough.gmane.org>\t7103\t16"
-                    "\tXref: news.gmane.org gmane.comp.python.authors:57"
+                    "\tXref: news.gmane.io gmane.comp.python.authors:57"
                     "\n"
                 "58\tLooking for a few good bloggers"
                     "\tDoug Hellmann <doug.hellmann-Re5JQEeQqe8AvxtiuMwx3w@public.gmane.org>"
@@ -621,7 +683,7 @@ class NNTPv1Handler:
                     "\t\t6683\t16"
                     "\t"
                     "\n"
-                # An UTF-8 overview line from fr.comp.lang.python
+                # A UTF-8 overview line from fr.comp.lang.python
                 "59\tRe: Message d'erreur incompréhensible (par moi)"
                     "\tEric Brunel <eric.brunel@pragmadev.nospam.com>"
                     "\tWed, 15 Sep 2010 18:09:15 +0200"
@@ -1098,7 +1160,7 @@ class NNTPv1v2TestsMixin:
             "references": "<hvalf7$ort$1@dough.gmane.org>",
             ":bytes": "7103",
             ":lines": "16",
-            "xref": "news.gmane.org gmane.comp.python.authors:57"
+            "xref": "news.gmane.io gmane.comp.python.authors:57"
             })
         art_num, over = overviews[1]
         self.assertEqual(over["xref"], None)
@@ -1477,14 +1539,14 @@ class MockSocketTests(unittest.TestCase):
     def test_service_temporarily_unavailable(self):
         #Test service temporarily unavailable
         class Handler(NNTPv1Handler):
-            welcome = '400 Service temporarily unavilable'
+            welcome = '400 Service temporarily unavailable'
         self.check_constructor_error_conditions(
             Handler, nntplib.NNTPTemporaryError, Handler.welcome)
 
     def test_service_permanently_unavailable(self):
         #Test service permanently unavailable
         class Handler(NNTPv1Handler):
-            welcome = '502 Service permanently unavilable'
+            welcome = '502 Service permanently unavailable'
         self.check_constructor_error_conditions(
             Handler, nntplib.NNTPPermanentError, Handler.welcome)
 
@@ -1519,6 +1581,66 @@ class MockSslTests(MockSocketTests):
     @staticmethod
     def nntp_class(*pos, **kw):
         return nntplib.NNTP_SSL(*pos, ssl_context=bypass_context, **kw)
+
+
+class LocalServerTests(unittest.TestCase):
+    def setUp(self):
+        sock = socket.socket()
+        port = socket_helper.bind_port(sock)
+        sock.listen()
+        self.background = threading.Thread(
+            target=self.run_server, args=(sock,))
+        self.background.start()
+        self.addCleanup(self.background.join)
+
+        self.nntp = NNTP(socket_helper.HOST, port, usenetrc=False).__enter__()
+        self.addCleanup(self.nntp.__exit__, None, None, None)
+
+    def run_server(self, sock):
+        # Could be generalized to handle more commands in separate methods
+        with sock:
+            [client, _] = sock.accept()
+        with contextlib.ExitStack() as cleanup:
+            cleanup.enter_context(client)
+            reader = cleanup.enter_context(client.makefile('rb'))
+            client.sendall(b'200 Server ready\r\n')
+            while True:
+                cmd = reader.readline()
+                if cmd == b'CAPABILITIES\r\n':
+                    client.sendall(
+                        b'101 Capability list:\r\n'
+                        b'VERSION 2\r\n'
+                        b'STARTTLS\r\n'
+                        b'.\r\n'
+                    )
+                elif cmd == b'STARTTLS\r\n':
+                    reader.close()
+                    client.sendall(b'382 Begin TLS negotiation now\r\n')
+                    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                    context.load_cert_chain(certfile)
+                    client = context.wrap_socket(
+                        client, server_side=True)
+                    cleanup.enter_context(client)
+                    reader = cleanup.enter_context(client.makefile('rb'))
+                elif cmd == b'QUIT\r\n':
+                    client.sendall(b'205 Bye!\r\n')
+                    break
+                else:
+                    raise ValueError('Unexpected command {!r}'.format(cmd))
+
+    @unittest.skipUnless(ssl, 'requires SSL support')
+    def test_starttls(self):
+        file = self.nntp.file
+        sock = self.nntp.sock
+        self.nntp.starttls()
+        # Check that the socket and internal pseudo-file really were
+        # changed.
+        self.assertNotEqual(file, self.nntp.file)
+        self.assertNotEqual(sock, self.nntp.sock)
+        # Check that the new socket really is an SSL one
+        self.assertIsInstance(self.nntp.sock, ssl.SSLSocket)
+        # Check that trying starttls when it's already active fails.
+        self.assertRaises(ValueError, self.nntp.starttls)
 
 
 if __name__ == "__main__":

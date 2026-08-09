@@ -2,6 +2,7 @@
 /* Python interpreter main program for frozen scripts */
 
 #include "Python.h"
+#include "pycore_runtime.h"  // _PyRuntime_Initialize()
 #include <locale.h>
 
 #ifdef MS_WINDOWS
@@ -15,7 +16,12 @@ extern int PyInitFrozenExtensions(void);
 int
 Py_FrozenMain(int argc, char **argv)
 {
-    char *p;
+    PyStatus status = _PyRuntime_Initialize();
+    if (PyStatus_Exception(status)) {
+        Py_ExitStatusException(status);
+    }
+
+    const char *p;
     int i, n, sts = 1;
     int inspect = 0;
     int unbuffered = 0;
@@ -33,7 +39,9 @@ Py_FrozenMain(int argc, char **argv)
         }
     }
 
-    Py_FrozenFlag = 1; /* Suppress errors from getpath.c */
+    PyConfig config;
+    PyConfig_InitPythonConfig(&config);
+    config.pathconfig_warnings = 0;   /* Suppress errors from getpath.c */
 
     if ((p = Py_GETENV("PYTHONINSPECT")) && *p != '\0')
         inspect = 1;
@@ -54,7 +62,7 @@ Py_FrozenMain(int argc, char **argv)
 
     setlocale(LC_ALL, "");
     for (i = 0; i < argc; i++) {
-        argv_copy[i] = _Py_char2wchar(argv[i], NULL);
+        argv_copy[i] = Py_DecodeLocale(argv[i], NULL);
         argv_copy2[i] = argv_copy[i];
         if (!argv_copy[i]) {
             fprintf(stderr, "Unable to decode the command line argument #%i\n",
@@ -72,7 +80,13 @@ Py_FrozenMain(int argc, char **argv)
 #endif /* MS_WINDOWS */
     if (argc >= 1)
         Py_SetProgramName(argv_copy[0]);
-    Py_Initialize();
+
+    status = Py_InitializeFromConfig(&config);
+    PyConfig_Clear(&config);
+    if (PyStatus_Exception(status)) {
+        Py_ExitStatusException(status);
+    }
+
 #ifdef MS_WINDOWS
     PyWinFreeze_ExeInit();
 #endif
@@ -85,7 +99,7 @@ Py_FrozenMain(int argc, char **argv)
 
     n = PyImport_ImportFrozenModule("__main__");
     if (n == 0)
-        Py_FatalError("__main__ not frozen");
+        Py_FatalError("the __main__ module is not frozen");
     if (n < 0) {
         PyErr_Print();
         sts = 1;
@@ -99,7 +113,9 @@ Py_FrozenMain(int argc, char **argv)
 #ifdef MS_WINDOWS
     PyWinFreeze_ExeTerm();
 #endif
-    Py_Finalize();
+    if (Py_FinalizeEx() < 0) {
+        sts = 120;
+    }
 
 error:
     PyMem_RawFree(argv_copy);

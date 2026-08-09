@@ -2,8 +2,8 @@
 
 // Copyright (c) 2007-2015 Barend Gehrels, Amsterdam, the Netherlands.
 
-// This file was modified by Oracle on 2017.
-// Modifications copyright (c) 2017 Oracle and/or its affiliates.
+// This file was modified by Oracle on 2017-2020.
+// Modifications copyright (c) 2017-2020 Oracle and/or its affiliates.
 
 // Contributed and/or modified by Adam Wulkiewicz, on behalf of Oracle
 
@@ -20,7 +20,8 @@
 #include <set>
 #include <vector>
 
-#include <boost/range.hpp>
+#include <boost/core/addressof.hpp>
+#include <boost/range/value_type.hpp>
 
 #include <boost/geometry/algorithms/detail/overlay/copy_segment_point.hpp>
 #include <boost/geometry/algorithms/detail/overlay/sort_by_side.hpp>
@@ -71,13 +72,11 @@ template
 struct less_by_segment_ratio
 {
     inline less_by_segment_ratio(Turns const& turns
-            , operation_type for_operation
             , Geometry1 const& geometry1
             , Geometry2 const& geometry2
             , RobustPolicy const& robust_policy
             , SideStrategy const& strategy)
         : m_turns(turns)
-        , m_for_operation(for_operation)
         , m_geometry1(geometry1)
         , m_geometry2(geometry2)
         , m_robust_policy(robust_policy)
@@ -88,7 +87,6 @@ struct less_by_segment_ratio
 private :
 
     Turns const& m_turns;
-    operation_type m_for_operation;
     Geometry1 const& m_geometry1;
     Geometry2 const& m_geometry2;
     RobustPolicy const& m_robust_policy;

@@ -21,14 +21,14 @@
 //=============================================================================
 
 // using macro to be compatable with GCC
-#define FmtStrVSNPrintf( szBuf, nBufSize, ppszFormat ) \
+#define FmtStrVSNPrintf( szBuf, nBufSize, pszFormat ) \
 	do \
 	{ \
 		int     result; \
 		va_list arg_ptr; \
 	\
-		va_start(arg_ptr, (*(ppszFormat))); \
-		result = Q_vsnprintf((szBuf), (nBufSize)-1, (*(ppszFormat)), arg_ptr); \
+		va_start(arg_ptr, pszFormat); \
+		result = Q_vsnprintf((szBuf), (nBufSize)-1, pszFormat, arg_ptr); \
 		va_end(arg_ptr); \
 	\
 		(szBuf)[(nBufSize)-1] = 0; \
@@ -50,19 +50,19 @@ public:
 	// Standard C formatting
 	CFmtStrN(const char *pszFormat, ...) FMTFUNCTION( 2, 3 )
 	{
-		FmtStrVSNPrintf(m_szBuf, SIZE_BUF, &pszFormat);
+		FmtStrVSNPrintf(m_szBuf, SIZE_BUF, pszFormat);
 	}
 
 	// Use this for pass-through formatting
 	CFmtStrN(const char ** ppszFormat, ...)
 	{
-		FmtStrVSNPrintf(m_szBuf, SIZE_BUF, ppszFormat);
+		FmtStrVSNPrintf(m_szBuf, SIZE_BUF, *ppszFormat);
 	}
 
 	// Explicit reformat
 	const char *sprintf(const char *pszFormat, ...)	FMTFUNCTION( 2, 3 )
 	{
-		FmtStrVSNPrintf(m_szBuf, SIZE_BUF, &pszFormat); 
+		FmtStrVSNPrintf(m_szBuf, SIZE_BUF, pszFormat);
 		return m_szBuf;
 	}
 
@@ -81,7 +81,7 @@ public:
 
 	void Clear()								{ m_szBuf[0] = 0; }
 
-	void AppendFormat( const char *pchFormat, ... ) { int nLength = Length(); char *pchEnd = m_szBuf + nLength; FmtStrVSNPrintf( pchEnd, SIZE_BUF - nLength, &pchFormat ); }
+	void AppendFormat( const char *pchFormat, ... ) { int nLength = Length(); char *pchEnd = m_szBuf + nLength; FmtStrVSNPrintf( pchEnd, SIZE_BUF - nLength, pchFormat ); }
 	void AppendFormatV( const char *pchFormat, va_list args );
 	void Append( const char *pchValue ) { AppendFormat( pchValue ); }
 

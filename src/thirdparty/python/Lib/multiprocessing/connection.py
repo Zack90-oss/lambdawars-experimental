@@ -20,11 +20,11 @@ import itertools
 
 import _multiprocessing
 
-from . import reduction
 from . import util
 
 from . import AuthenticationError, BufferTooShort
-from .reduction import ForkingPickler
+from .context import reduction
+_ForkingPickler = reduction.ForkingPickler
 
 try:
     import _winapi
@@ -57,10 +57,10 @@ if sys.platform == 'win32':
 
 
 def _init_timeout(timeout=CONNECTION_TIMEOUT):
-    return time.time() + timeout
+    return time.monotonic() + timeout
 
 def _check_timeout(t):
-    return time.time() > t
+    return time.monotonic() > t
 
 #
 #
@@ -73,6 +73,11 @@ def arbitrary_address(family):
     if family == 'AF_INET':
         return ('localhost', 0)
     elif family == 'AF_UNIX':
+        # Prefer abstract sockets if possible to avoid problems with the address
+        # size.  When coding portable applications, some implementations have
+        # sun_path as short as 92 bytes in the sockaddr_un struct.
+        if util.abstract_sockets_supported:
+            return f"\0listener-{os.getpid()}-{next(_mmap_counter)}"
         return tempfile.mktemp(prefix='listener-', dir=util.get_temp_dir())
     elif family == 'AF_PIPE':
         return tempfile.mktemp(prefix=r'\\.\pipe\pyc-%d-%d-' %
@@ -102,7 +107,7 @@ def address_type(address):
         return 'AF_INET'
     elif type(address) is str and address.startswith('\\\\'):
         return 'AF_PIPE'
-    elif type(address) is str:
+    elif type(address) is str or util.is_abstract_socket_namespace(address):
         return 'AF_UNIX'
     else:
         raise ValueError('address type of %r unrecognized' % address)
@@ -203,7 +208,7 @@ class _ConnectionBase:
         """Send a (picklable) object"""
         self._check_closed()
         self._check_writable()
-        self._send_bytes(ForkingPickler.dumps(obj))
+        self._send_bytes(_ForkingPickler.dumps(obj))
 
     def recv_bytes(self, maxlength=None):
         """
@@ -248,7 +253,7 @@ class _ConnectionBase:
         self._check_closed()
         self._check_readable()
         buf = self._recv_bytes()
-        return ForkingPickler.loads(buf.getbuffer())
+        return _ForkingPickler.loads(buf.getbuffer())
 
     def poll(self, timeout=0.0):
         """Whether there is any input available to be read"""
@@ -365,10 +370,7 @@ class Connection(_ConnectionBase):
     def _send(self, buf, write=_write):
         remaining = len(buf)
         while True:
-            try:
-                n = write(self._handle, buf)
-            except InterruptedError:
-                continue
+            n = write(self._handle, buf)
             remaining -= n
             if remaining == 0:
                 break
@@ -379,10 +381,7 @@ class Connection(_ConnectionBase):
         handle = self._handle
         remaining = size
         while remaining > 0:
-            try:
-                chunk = read(handle, remaining)
-            except InterruptedError:
-                continue
+            chunk = read(handle, remaining)
             n = len(chunk)
             if n == 0:
                 if remaining == size:
@@ -395,26 +394,33 @@ class Connection(_ConnectionBase):
 
     def _send_bytes(self, buf):
         n = len(buf)
-        # For wire compatibility with 3.2 and lower
-        header = struct.pack("!i", n)
-        if n > 16384:
-            # The payload is large so Nagle's algorithm won't be triggered
-            # and we'd better avoid the cost of concatenation.
-            chunks = [header, buf]
-        elif n > 0:
-            # Issue # 20540: concatenate before sending, to avoid delays due
-            # to Nagle's algorithm on a TCP socket.
-            chunks = [header + buf]
+        if n > 0x7fffffff:
+            pre_header = struct.pack("!i", -1)
+            header = struct.pack("!Q", n)
+            self._send(pre_header)
+            self._send(header)
+            self._send(buf)
         else:
-            # This code path is necessary to avoid "broken pipe" errors
-            # when sending a 0-length buffer if the other end closed the pipe.
-            chunks = [header]
-        for chunk in chunks:
-            self._send(chunk)
+            # For wire compatibility with 3.7 and lower
+            header = struct.pack("!i", n)
+            if n > 16384:
+                # The payload is large so Nagle's algorithm won't be triggered
+                # and we'd better avoid the cost of concatenation.
+                self._send(header)
+                self._send(buf)
+            else:
+                # Issue #20540: concatenate before sending, to avoid delays due
+                # to Nagle's algorithm on a TCP socket.
+                # Also note we want to avoid sending a 0-length buffer separately,
+                # to avoid "broken pipe" errors if the other end closed the pipe.
+                self._send(header + buf)
 
     def _recv_bytes(self, maxsize=None):
         buf = self._recv(4)
         size, = struct.unpack("!i", buf.getvalue())
+        if size == -1:
+            buf = self._recv(8)
+            size, = struct.unpack("!Q", buf.getvalue())
         if maxsize is not None and size > maxsize:
             return None
         return self._recv(size)
@@ -474,8 +480,13 @@ class Listener(object):
             self._listener = None
             listener.close()
 
-    address = property(lambda self: self._listener._address)
-    last_accepted = property(lambda self: self._listener._last_accepted)
+    @property
+    def address(self):
+        return self._listener._address
+
+    @property
+    def last_accepted(self):
+        return self._listener._last_accepted
 
     def __enter__(self):
         return self
@@ -591,7 +602,8 @@ class SocketListener(object):
         self._family = family
         self._last_accepted = None
 
-        if family == 'AF_UNIX':
+        if family == 'AF_UNIX' and not util.is_abstract_socket_namespace(address):
+            # Linux abstract socket namespaces do not need to be explicitly unlinked
             self._unlink = util.Finalize(
                 self, os.unlink, args=(address,), exitpriority=0
                 )
@@ -599,13 +611,7 @@ class SocketListener(object):
             self._unlink = None
 
     def accept(self):
-        while True:
-            try:
-                s, self._last_accepted = self._socket.accept()
-            except InterruptedError:
-                pass
-            else:
-                break
+        s, self._last_accepted = self._socket.accept()
         s.setblocking(True)
         return Connection(s.detach())
 
@@ -730,7 +736,9 @@ FAILURE = b'#FAILURE#'
 
 def deliver_challenge(connection, authkey):
     import hmac
-    assert isinstance(authkey, bytes)
+    if not isinstance(authkey, bytes):
+        raise ValueError(
+            "Authkey must be bytes, not {0!s}".format(type(authkey)))
     message = os.urandom(MESSAGE_LENGTH)
     connection.send_bytes(CHALLENGE + message)
     digest = hmac.new(authkey, message, 'md5').digest()
@@ -743,7 +751,9 @@ def deliver_challenge(connection, authkey):
 
 def answer_challenge(connection, authkey):
     import hmac
-    assert isinstance(authkey, bytes)
+    if not isinstance(authkey, bytes):
+        raise ValueError(
+            "Authkey must be bytes, not {0!s}".format(type(authkey)))
     message = connection.recv_bytes(256)         # reject large message
     assert message[:len(CHALLENGE)] == CHALLENGE, 'message = %r' % message
     message = message[len(CHALLENGE):]
@@ -920,7 +930,7 @@ else:
                 selector.register(obj, selectors.EVENT_READ)
 
             if timeout is not None:
-                deadline = time.time() + timeout
+                deadline = time.monotonic() + timeout
 
             while True:
                 ready = selector.select(timeout)
@@ -928,7 +938,7 @@ else:
                     return [key.fileobj for (key, events) in ready]
                 else:
                     if timeout is not None:
-                        timeout = deadline - time.time()
+                        timeout = deadline - time.monotonic()
                         if timeout < 0:
                             return ready
 

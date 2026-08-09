@@ -1,9 +1,4 @@
 # ifndef BOOST_PYTHON_SYNOPSIS 
-
-#include "../tuple.hpp"
-
-namespace boost { namespace python {
-/*
 # // Copyright David Abrahams 2002.
 # // Distributed under the Boost Software License, Version 1.0. (See
 # // accompanying file LICENSE_1_0.txt or copy at
@@ -34,11 +29,4 @@ namespace boost { namespace python {
 #  undef BOOST_PYTHON_MAKE_TUPLE_ARG
 
 #  undef N
-	*/
-	boost::python::tuple make_tuple(...)
-	{
-		tuple result;
-		return result;
-	}
-}}
 # endif // BOOST_PYTHON_SYNOPSIS 

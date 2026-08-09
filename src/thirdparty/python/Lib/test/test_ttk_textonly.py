@@ -1,11 +1,9 @@
-import os
 from test import support
+from test.support import import_helper
+
 
 # Skip this test if _tkinter does not exist.
-support.import_module('_tkinter')
-
-# Make sure tkinter._fix runs to set up the environment
-support.import_fresh_module('tkinter')
+import_helper.import_module('_tkinter')
 
 from tkinter.test import runtktests
 

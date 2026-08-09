@@ -1,6 +1,7 @@
 # Check every path through every method of UserDict
 
-from test import support, mapping_tests
+from test import mapping_tests
+import unittest
 import collections
 
 d0 = {}
@@ -29,8 +30,8 @@ class UserDictTest(mapping_tests.TestHashMappingProtocol):
         self.assertEqual(collections.UserDict(one=1, two=2), d2)
         # item sequence constructor
         self.assertEqual(collections.UserDict([('one',1), ('two',2)]), d2)
-        with self.assertWarnsRegex(PendingDeprecationWarning, "'dict'"):
-            self.assertEqual(collections.UserDict(dict=[('one',1), ('two',2)]), d2)
+        self.assertEqual(collections.UserDict(dict=[('one',1), ('two',2)]),
+                         {'dict': [('one', 1), ('two', 2)]})
         # both together
         self.assertEqual(collections.UserDict([('one',1), ('two',2)], two=3, three=5), d3)
 
@@ -148,9 +149,8 @@ class UserDictTest(mapping_tests.TestHashMappingProtocol):
                          [('dict', 42)])
         self.assertEqual(list(collections.UserDict({}, dict=None).items()),
                          [('dict', None)])
-        with self.assertWarnsRegex(PendingDeprecationWarning, "'dict'"):
-            self.assertEqual(list(collections.UserDict(dict={'a': 42}).items()),
-                             [('a', 42)])
+        self.assertEqual(list(collections.UserDict(dict={'a': 42}).items()),
+                         [('dict', {'a': 42})])
         self.assertRaises(TypeError, collections.UserDict, 42)
         self.assertRaises(TypeError, collections.UserDict, (), ())
         self.assertRaises(TypeError, collections.UserDict.__init__)
@@ -215,10 +215,5 @@ class UserDictTest(mapping_tests.TestHashMappingProtocol):
 
 
 
-def test_main():
-    support.run_unittest(
-        UserDictTest,
-    )
-
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

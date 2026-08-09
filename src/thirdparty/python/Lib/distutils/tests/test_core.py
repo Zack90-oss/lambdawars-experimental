@@ -5,8 +5,8 @@ import distutils.core
 import os
 import shutil
 import sys
-import test.support
 from test.support import captured_stdout, run_unittest
+from test.support import os_helper
 import unittest
 from distutils.tests import support
 from distutils import log
@@ -29,6 +29,21 @@ from distutils.core import setup
 setup()
 """
 
+setup_does_nothing = """\
+from distutils.core import setup
+setup()
+"""
+
+
+setup_defines_subclass = """\
+from distutils.core import setup
+from distutils.command.install import install as _install
+
+class install(_install):
+    sub_commands = _install.sub_commands + ['cmd']
+
+setup(cmdclass={'install': install})
+"""
 
 class CoreTestCase(support.EnvironGuard, unittest.TestCase):
 
@@ -47,13 +62,13 @@ class CoreTestCase(support.EnvironGuard, unittest.TestCase):
         super(CoreTestCase, self).tearDown()
 
     def cleanup_testfn(self):
-        path = test.support.TESTFN
+        path = os_helper.TESTFN
         if os.path.isfile(path):
             os.remove(path)
         elif os.path.isdir(path):
             shutil.rmtree(path)
 
-    def write_setup(self, text, path=test.support.TESTFN):
+    def write_setup(self, text, path=os_helper.TESTFN):
         f = open(path, "w")
         try:
             f.write(text)
@@ -67,6 +82,21 @@ class CoreTestCase(support.EnvironGuard, unittest.TestCase):
         distutils.core.run_setup(
             self.write_setup(setup_using___file__))
 
+    def test_run_setup_preserves_sys_argv(self):
+        # Make sure run_setup does not clobber sys.argv
+        argv_copy = sys.argv.copy()
+        distutils.core.run_setup(
+            self.write_setup(setup_does_nothing))
+        self.assertEqual(sys.argv, argv_copy)
+
+    def test_run_setup_defines_subclass(self):
+        # Make sure the script can use __file__; if that's missing, the test
+        # setup.py script will raise NameError.
+        dist = distutils.core.run_setup(
+            self.write_setup(setup_defines_subclass))
+        install = dist.get_command_obj('install')
+        self.assertIn('cmd', install.sub_commands)
+
     def test_run_setup_uses_current_dir(self):
         # This tests that the setup script is run with the current directory
         # as its own current directory; this was temporarily broken by a
@@ -75,8 +105,8 @@ class CoreTestCase(support.EnvironGuard, unittest.TestCase):
         cwd = os.getcwd()
 
         # Create a directory and write the setup.py file there:
-        os.mkdir(test.support.TESTFN)
-        setup_py = os.path.join(test.support.TESTFN, "setup.py")
+        os.mkdir(os_helper.TESTFN)
+        setup_py = os.path.join(os_helper.TESTFN, "setup.py")
         distutils.core.run_setup(
             self.write_setup(setup_prints_cwd, path=setup_py))
 

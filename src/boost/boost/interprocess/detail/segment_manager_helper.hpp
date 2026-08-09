@@ -92,7 +92,7 @@ struct block_header
       :  m_value_bytes(val_bytes)
       ,  m_num_char((unsigned short)num_char)
       ,  m_value_alignment((unsigned char)val_alignment)
-      ,  m_alloc_type_sizeof_char( (al_type << 5u) | ((unsigned char)szof_char & 0x1F) )
+      ,  m_alloc_type_sizeof_char( (unsigned char)((al_type << 5u) | ((unsigned char)szof_char & 0x1F)) )
    {};
 
    template<class T>
@@ -102,7 +102,7 @@ struct block_header
    size_type total_size() const
    {
       if(alloc_type() != anonymous_type){
-         return name_offset() + (m_num_char+1)*sizeof_char();
+         return name_offset() + (m_num_char+1u)*sizeof_char();
       }
       else{
          return this->value_offset() + m_value_bytes;
@@ -117,7 +117,7 @@ struct block_header
    {
       return get_rounded_size
                ( size_type(sizeof(Header))
-            , size_type(::boost::container::container_detail::alignment_of<block_header<size_type> >::value))
+            , size_type(::boost::container::dtl::alignment_of<block_header<size_type> >::value))
            + total_size();
    }
 
@@ -169,7 +169,7 @@ struct block_header
 
    template<class T>
    static block_header<size_type> *block_header_from_value(T *value)
-   {  return block_header_from_value(value, sizeof(T), ::boost::container::container_detail::alignment_of<T>::value);  }
+   {  return block_header_from_value(value, sizeof(T), ::boost::container::dtl::alignment_of<T>::value);  }
 
    static block_header<size_type> *block_header_from_value(const void *value, std::size_t sz, std::size_t algn)
    {
@@ -190,7 +190,7 @@ struct block_header
       block_header<size_type> * hdr =
          reinterpret_cast<block_header<size_type>*>(reinterpret_cast<char*>(header) +
        get_rounded_size( size_type(sizeof(Header))
-                       , size_type(::boost::container::container_detail::alignment_of<block_header<size_type> >::value)));
+                       , size_type(::boost::container::dtl::alignment_of<block_header<size_type> >::value)));
       //Some sanity checks
       return hdr;
    }
@@ -201,7 +201,7 @@ struct block_header
       Header * hdr =
          reinterpret_cast<Header*>(reinterpret_cast<char*>(bheader) -
        get_rounded_size( size_type(sizeof(Header))
-                       , size_type(::boost::container::container_detail::alignment_of<block_header<size_type> >::value)));
+                       , size_type(::boost::container::dtl::alignment_of<block_header<size_type> >::value)));
       //Some sanity checks
       return hdr;
    }
@@ -219,8 +219,7 @@ inline void array_construct(void *mem, std::size_t num, in_place_interface &tabl
       std::size_t destroyed = 0;
       table.destroy_n(mem, constructed, destroyed);
       BOOST_RETHROW
-   }
-   BOOST_CATCH_END
+   } BOOST_CATCH_END
 }
 
 template<class CharT>
@@ -275,7 +274,7 @@ struct intrusive_value_type_impl
 
    intrusive_value_type_impl(){}
 
-   enum  {  BlockHdrAlignment = ::boost::container::container_detail::alignment_of<block_header<size_type> >::value  };
+   enum  {  BlockHdrAlignment = ::boost::container::dtl::alignment_of<block_header<size_type> >::value  };
 
    block_header<size_type> *get_block_header() const
    {

@@ -1,7 +1,10 @@
 import unittest
-
+import gc
+import tkinter
 from tkinter import (Variable, StringVar, IntVar, DoubleVar, BooleanVar, Tcl,
                      TclError)
+from test.support import ALWAYS_EQ
+from tkinter.test.support import AbstractDefaultRootTest
 
 
 class Var(Variable):
@@ -55,15 +58,31 @@ class TestVariable(TestBase):
         del v2
         self.assertFalse(self.info_exists("name"))
 
-    def test___eq__(self):
+    def test_equality(self):
         # values doesn't matter, only class and name are checked
         v1 = Variable(self.root, name="abc")
         v2 = Variable(self.root, name="abc")
+        self.assertIsNot(v1, v2)
         self.assertEqual(v1, v2)
 
-        v3 = Variable(self.root, name="abc")
+        v3 = Variable(self.root, name="cba")
+        self.assertNotEqual(v1, v3)
+
         v4 = StringVar(self.root, name="abc")
-        self.assertNotEqual(v3, v4)
+        self.assertEqual(str(v1), str(v4))
+        self.assertNotEqual(v1, v4)
+
+        V = type('Variable', (), {})
+        self.assertNotEqual(v1, V())
+
+        self.assertNotEqual(v1, object())
+        self.assertEqual(v1, ALWAYS_EQ)
+
+        root2 = tkinter.Tk()
+        self.addCleanup(root2.destroy)
+        v5 = Variable(root2, name="abc")
+        self.assertEqual(str(v1), str(v5))
+        self.assertNotEqual(v1, v5)
 
     def test_invalid_name(self):
         with self.assertRaises(TypeError):
@@ -86,6 +105,105 @@ class TestVariable(TestBase):
         self.assertFalse(v.side_effect)
         v.set("value")
         self.assertTrue(v.side_effect)
+
+    def test_trace_old(self):
+        # Old interface
+        v = Variable(self.root)
+        vname = str(v)
+        trace = []
+        def read_tracer(*args):
+            trace.append(('read',) + args)
+        def write_tracer(*args):
+            trace.append(('write',) + args)
+        cb1 = v.trace_variable('r', read_tracer)
+        cb2 = v.trace_variable('wu', write_tracer)
+        self.assertEqual(sorted(v.trace_vinfo()), [('r', cb1), ('wu', cb2)])
+        self.assertEqual(trace, [])
+
+        v.set('spam')
+        self.assertEqual(trace, [('write', vname, '', 'w')])
+
+        trace = []
+        v.get()
+        self.assertEqual(trace, [('read', vname, '', 'r')])
+
+        trace = []
+        info = sorted(v.trace_vinfo())
+        v.trace_vdelete('w', cb1)  # Wrong mode
+        self.assertEqual(sorted(v.trace_vinfo()), info)
+        with self.assertRaises(TclError):
+            v.trace_vdelete('r', 'spam')  # Wrong command name
+        self.assertEqual(sorted(v.trace_vinfo()), info)
+        v.trace_vdelete('r', (cb1, 43)) # Wrong arguments
+        self.assertEqual(sorted(v.trace_vinfo()), info)
+        v.get()
+        self.assertEqual(trace, [('read', vname, '', 'r')])
+
+        trace = []
+        v.trace_vdelete('r', cb1)
+        self.assertEqual(v.trace_vinfo(), [('wu', cb2)])
+        v.get()
+        self.assertEqual(trace, [])
+
+        trace = []
+        del write_tracer
+        gc.collect()
+        v.set('eggs')
+        self.assertEqual(trace, [('write', vname, '', 'w')])
+
+        trace = []
+        del v
+        gc.collect()
+        self.assertEqual(trace, [('write', vname, '', 'u')])
+
+    def test_trace(self):
+        v = Variable(self.root)
+        vname = str(v)
+        trace = []
+        def read_tracer(*args):
+            trace.append(('read',) + args)
+        def write_tracer(*args):
+            trace.append(('write',) + args)
+        tr1 = v.trace_add('read', read_tracer)
+        tr2 = v.trace_add(['write', 'unset'], write_tracer)
+        self.assertEqual(sorted(v.trace_info()), [
+                         (('read',), tr1),
+                         (('write', 'unset'), tr2)])
+        self.assertEqual(trace, [])
+
+        v.set('spam')
+        self.assertEqual(trace, [('write', vname, '', 'write')])
+
+        trace = []
+        v.get()
+        self.assertEqual(trace, [('read', vname, '', 'read')])
+
+        trace = []
+        info = sorted(v.trace_info())
+        v.trace_remove('write', tr1)  # Wrong mode
+        self.assertEqual(sorted(v.trace_info()), info)
+        with self.assertRaises(TclError):
+            v.trace_remove('read', 'spam')  # Wrong command name
+        self.assertEqual(sorted(v.trace_info()), info)
+        v.get()
+        self.assertEqual(trace, [('read', vname, '', 'read')])
+
+        trace = []
+        v.trace_remove('read', tr1)
+        self.assertEqual(v.trace_info(), [(('write', 'unset'), tr2)])
+        v.get()
+        self.assertEqual(trace, [])
+
+        trace = []
+        del write_tracer
+        gc.collect()
+        v.set('eggs')
+        self.assertEqual(trace, [('write', vname, '', 'write')])
+
+        trace = []
+        del v
+        gc.collect()
+        self.assertEqual(trace, [('write', vname, '', 'unset')])
 
 
 class TestStringVar(TestBase):
@@ -118,14 +236,13 @@ class TestIntVar(TestBase):
         self.assertEqual(123, v.get())
         self.root.globalsetvar("name", "345")
         self.assertEqual(345, v.get())
+        self.root.globalsetvar("name", "876.5")
+        self.assertEqual(876, v.get())
 
     def test_invalid_value(self):
         v = IntVar(self.root, name="name")
         self.root.globalsetvar("name", "value")
-        with self.assertRaises(ValueError):
-            v.get()
-        self.root.globalsetvar("name", "345.0")
-        with self.assertRaises(ValueError):
+        with self.assertRaises((ValueError, TclError)):
             v.get()
 
 
@@ -152,7 +269,7 @@ class TestDoubleVar(TestBase):
     def test_invalid_value(self):
         v = DoubleVar(self.root, name="name")
         self.root.globalsetvar("name", "value")
-        with self.assertRaises(ValueError):
+        with self.assertRaises((ValueError, TclError)):
             v.get()
 
 
@@ -203,8 +320,21 @@ class TestBooleanVar(TestBase):
             v.get()
 
 
+class DefaultRootTest(AbstractDefaultRootTest, unittest.TestCase):
+
+    def test_variable(self):
+        self.assertRaises(RuntimeError, Variable)
+        root = tkinter.Tk()
+        v = Variable()
+        v.set("value")
+        self.assertEqual(v.get(), "value")
+        root.destroy()
+        tkinter.NoDefaultRoot()
+        self.assertRaises(RuntimeError, Variable)
+
+
 tests_gui = (TestVariable, TestStringVar, TestIntVar,
-             TestDoubleVar, TestBooleanVar)
+             TestDoubleVar, TestBooleanVar, DefaultRootTest)
 
 
 if __name__ == "__main__":

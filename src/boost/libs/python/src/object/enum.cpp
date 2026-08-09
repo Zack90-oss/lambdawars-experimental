@@ -220,13 +220,6 @@ void enum_base::add_value(char const* name_, long value)
     // Create a new enum instance by calling the class with a value
     object x = (*this)(value);
 
-    x.ptr();
-    x.ptr();
-    x.ptr();
-    x.ptr();
-
-    // FUCK YOURSELF
-    x.ptr();
 #if PY_VERSION_HEX >= 0x03000000
 	// ob_size is the number of digits for Long types
 	if (Py_SIZE(x.ptr()) > ENUM_SUPPORTED_DIGITS + 1)

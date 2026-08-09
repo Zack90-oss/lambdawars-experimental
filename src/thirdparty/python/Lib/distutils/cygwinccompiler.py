@@ -51,12 +51,10 @@ import copy
 from subprocess import Popen, PIPE, check_output
 import re
 
-from distutils.ccompiler import gen_preprocess_options, gen_lib_options
 from distutils.unixccompiler import UnixCCompiler
 from distutils.file_util import write_file
 from distutils.errors import (DistutilsExecError, CCompilerError,
         CompileError, UnknownFileError)
-from distutils import log
 from distutils.version import LooseVersion
 from distutils.spawn import find_executable
 
@@ -234,8 +232,8 @@ class CygwinCCompiler(UnixCCompiler):
         # who wants symbols and a many times larger output file
         # should explicitly switch the debug mode on
         # otherwise we let dllwrap/ld strip the output file
-        # (On my machine: 10KB < stripped_file < ??100KB
-        #   unstripped_file = stripped_file + XXX KB
+        # (On my machine: 10KiB < stripped_file < ??100KiB
+        #   unstripped_file = stripped_file + XXX KiB
         #  ( XXX=254 for a typical python extension))
         if not debug:
             extra_preargs.append("-s")
@@ -368,7 +366,7 @@ def check_config_h():
         return (CONFIG_H_UNCERTAIN,
                 "couldn't read '%s': %s" % (fn, exc.strerror))
 
-RE_VERSION = re.compile(b'(\d+\.\d+(\.\d+)*)')
+RE_VERSION = re.compile(br'(\d+\.\d+(\.\d+)*)')
 
 def _find_exe_version(cmd):
     """Find the version of an executable by running `cmd` in the shell.
