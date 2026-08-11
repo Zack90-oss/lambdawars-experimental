@@ -35,7 +35,7 @@ template <class T>
 inline void xdecref(T* p)
 {
     assert( !p || Py_REFCNT(python::upcast<PyObject>(p)) > 0 );
-	Py_XDECREF(python::upcast<PyObject>(p));
+    Py_XDECREF(python::upcast<PyObject>(p));
 }
 
 }} // namespace boost::python
