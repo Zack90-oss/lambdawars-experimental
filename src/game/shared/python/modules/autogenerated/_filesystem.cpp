@@ -140,7 +140,7 @@ BOOST_PYTHON_MODULE(_filesystem){
 
     { //::PyFS_String
     
-        typedef ::boost::python::tuple ( *String_function_type )( int const );
+        typedef ::boost::python::tuple ( *String_function_type )( int );
         
         bp::def( 
             "String"

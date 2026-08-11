@@ -1,3 +1,6 @@
+-I../../cef/include/base/internal
+-I../../cef/include/internal/linux
+-DAssert(expr)=((void)0)
 -D__DBL_MIN_EXP__=(-1021)
 -D__pentiumpro__=1
 -D__UINT_LEAST16_MAX__=65535

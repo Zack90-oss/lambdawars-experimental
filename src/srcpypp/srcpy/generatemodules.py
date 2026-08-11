@@ -94,7 +94,15 @@ clientincludes = baseincludes + [
     '../../game/client/cef',
     '../../cef',
 ]
-    
+
+skip_modules = [
+    # 2026/8/11
+    '_cef',
+]
+
+# skip_first_x_modules = 20
+skip_first_x_modules = 0
+
 #
 # Append code generation
 #        
@@ -192,6 +200,8 @@ def ParseModules(settings, specificmodule=None, appendfileonly=False):
     server_filenames = []
     shared_filenames = []
     
+    global skip_first_x_modules
+    
     # Add search paths and create list of modules to be parsed/exposed
     srcpath = settings.srcpath
     for path in settings.searchpaths:
@@ -218,26 +228,41 @@ def ParseModules(settings, specificmodule=None, appendfileonly=False):
         rm.serversrcdir = '../..' #servervpc.macros['SRCDIR']
         rm.clientsrcdir = '../..' #clientvpc.macros['SRCDIR']
         
+        do_not_do = False
+        
+        if(skip_first_x_modules > 0):
+            do_not_do = True
+            skip_first_x_modules = skip_first_x_modules - 1
+            
+        if(rm.module_name in skip_modules):
+            do_not_do = True
+        
+        if(do_not_do):
+            print('Skipping %s...' % (rm.module_name))
+        
         # Check if we should parse this module
         if not appendfileonly and (not specificmodule or specificmodule == rm.module_name):
             # Generate binding code
-            print('Generating %s...' % (rm.module_name))
-            rs = rm.Run()
-    
+            if(not do_not_do):
+                print('Generating %s...' % (rm.module_name))
+                
+                rs = rm.Run()
+        
         # Build module list for append code
-        if rm.module_type == 'client':
-            client_modules.append(rm.module_name)
-            client_filenames.extend(GetFilenames(rm))
-        elif rm.module_type == 'server':
-            server_modules.append(rm.module_name)
-            server_filenames.extend(GetFilenames(rm))
-        else:
-            shared_modules.append(rm.module_name)
-            if rm.split:
-                client_filenames.extend(GetFilenames(rm, isclient=True))
-                server_filenames.extend(GetFilenames(rm, isclient=False))
+        if(not do_not_do):
+            if rm.module_type == 'client':
+                client_modules.append(rm.module_name)
+                client_filenames.extend(GetFilenames(rm))
+            elif rm.module_type == 'server':
+                server_modules.append(rm.module_name)
+                server_filenames.extend(GetFilenames(rm))
             else:
-                shared_filenames.extend(GetFilenames(rm))
+                shared_modules.append(rm.module_name)
+                if rm.split:
+                    client_filenames.extend(GetFilenames(rm, isclient=True))
+                    server_filenames.extend(GetFilenames(rm, isclient=False))
+                else:
+                    shared_filenames.extend(GetFilenames(rm))
                 
      # Change back to srcpypp directory
     os.chdir(srcpyppdir)

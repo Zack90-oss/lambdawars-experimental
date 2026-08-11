@@ -80,6 +80,9 @@ dsymbols = [
     
     # Generation
     'PYPP_GENERATION',
+    
+    # 2026/8/11
+    # 'Assert=((void)0)',
 ]
 
 # Defined symbols

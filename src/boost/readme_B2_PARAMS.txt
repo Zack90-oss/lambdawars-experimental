@@ -7,6 +7,3 @@ b2 --build-dir=build ^
     link=static ^
     runtime-link=static ^
     -j4
-	
-IGNORE ME. Non-compiling push for version control
-+ some changes to fmstr.h and others to make compatible with MSVC v143

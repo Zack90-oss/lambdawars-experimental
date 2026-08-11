@@ -217,7 +217,9 @@ class scopedef_t( declaration.declaration_t ):
         self._optimized = True
 
     def _build_operator_function( self, name, function ):
-        if isinstance( name, collections.Callable):
+        # EDITED FROM ORIGINAL 2026/8/11
+        # if isinstance( name, collections.Callable):
+        if isinstance( name, collections.abc.Callable):
             return name
         else:
             return function
@@ -229,7 +231,9 @@ class scopedef_t( declaration.declaration_t ):
                 return 'operator ' + sym
             else:
                 return 'operator'+ sym
-        if isinstance( name, collections.Callable) and None is function:
+        # EDITED FROM ORIGINAL 2026/8/11
+        # if isinstance( name, collections.Callable) and None is function:
+        if isinstance( name, collections.abc.Callable) and None is function:
             name = None
         if name:
             if not 'operator' in name:
@@ -251,7 +255,9 @@ class scopedef_t( declaration.declaration_t ):
 
     def __normalize_args( self, **keywds ):
         """implementation details"""
-        if isinstance( keywds['name'], collections.Callable) and None is keywds['function']:
+        # EDITED FROM ORIGINAL 2026/8/11
+        # if isinstance( keywds['name'], collections.Callable) and None is keywds['function']:
+        if isinstance( keywds['name'], collections.abc.Callable) and None is keywds['function']:
             keywds['function'] = keywds['name']
             keywds['name'] = None
         return keywds
